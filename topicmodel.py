@@ -21,7 +21,9 @@ import tiktoken
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 
-cache_path = Path(os.getenv("LLM_CACHE", Path.home() / ".cache" / "llmfoundry" / "embeddings.db"))
+cache_path = Path(
+    os.getenv("TOPICMODEL_CACHE", Path.home() / ".cache" / "topicmodel" / "embeddings.db")
+)
 
 
 def cache_conn() -> sqlite3.Connection:
@@ -50,11 +52,19 @@ async def embed(texts: list[str], model: str) -> np.ndarray:
         return np.empty((0, 0))
     conn = cache_conn()
     keys = [hashlib.sha256(f"{model}\n{t}".encode()).hexdigest() for t in texts]
-    ph = ",".join("?" * len(keys))
-    cached = {
-        k: np.frombuffer(b, np.float32)
-        for k, b in conn.execute(f"SELECT key, data FROM cache WHERE key IN ({ph})", keys)
-    }
+    cached: dict[str, np.ndarray] = {}
+    for i in range(0, len(keys), 32000):
+        batch = keys[i : i + 32000]
+        ph = ",".join("?" * len(batch))
+        cached.update(
+            {
+                k: np.frombuffer(b, np.float32)
+                for k, b in conn.execute(
+                    f"SELECT key, data FROM cache WHERE key IN ({ph})",
+                    batch,
+                )
+            }
+        )
     missing = [(k, t) for k, t in zip(keys, texts) if k not in cached]
     if missing:
         api_key = os.getenv("OPENAI_API_KEY")

@@ -10,9 +10,64 @@ a list is not provided.
 pip install topicmodel
 ```
 
+Embeddings are cached in the file specified by the `TOPICMODEL_CACHE` environment
+variable. By default it uses `~/.cache/topicmodel/embeddings.db` which works on
+Windows, macOS and Linux.
+
 ## Usage
 
 `uvx topicmodel --docs path/to/docs.csv`
+
+### Document formats
+
+**CSV**
+
+```csv
+text
+Apples are great
+Bananas are yellow
+```
+
+**JSON**
+
+```json
+[{"text": "Apples are great"}, {"text": "Bananas are yellow"}]
+```
+
+**TXT**
+
+```text
+Apples are great
+Bananas are yellow
+```
+
+### Topics file
+
+```csv
+topic
+Fruit
+Vegetable
+```
+
+### Examples
+
+Match documents to topics and save JSON:
+
+```bash
+uvx topicmodel --docs docs.csv --topics topics.csv --output result.json
+```
+
+Discover topics from a TXT file:
+
+```bash
+uvx topicmodel \
+  --docs docs.txt \
+  --output result.csv \
+  --ntopics 5 \
+  --name_model gpt-4.1-nano \
+  --nsamples 3 \
+  --truncate 100
+```
 
 ### Options
 
@@ -34,4 +89,7 @@ pip install topicmodel
 
 ## Development
 
-Lint with `uvx ruff --line-length 100 .` and run tests with `pytest`.
+```bash
+uvx ruff --line-length 100 .
+uvx --with pytest-asyncio,httpx,pandas,numpy,scikit-learn,tiktoken,tqdm pytest
+```

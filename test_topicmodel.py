@@ -1,6 +1,7 @@
 # usage: uvx --with pytest-asyncio,httpx,pandas,numpy,scikit-learn,tiktoken,tqdm pytest
 
 import json
+
 import pytest
 
 
@@ -40,8 +41,9 @@ async def test_similarity(monkeypatch, tmp_path):
         {"data": [{"embedding": [1, 0]}, {"embedding": [0, 1]}]},
         {"data": [{"embedding": [1, 0]}, {"embedding": [0, 1]}]},
     ]
-    monkeypatch.setenv("LLM_CACHE", str(tmp_path / "cache.db"))
+    monkeypatch.setenv("TOPICMODEL_CACHE", str(tmp_path / "cache.db"))
     import importlib
+
     import topicmodel
 
     importlib.reload(topicmodel)
@@ -80,8 +82,9 @@ async def test_cluster(monkeypatch, tmp_path):
         },
         {"data": [{"embedding": [1, 0]}, {"embedding": [0, 1]}]},
     ]
-    monkeypatch.setenv("LLM_CACHE", str(tmp_path / "cache.db"))
+    monkeypatch.setenv("TOPICMODEL_CACHE", str(tmp_path / "cache.db"))
     import importlib
+
     import topicmodel
 
     importlib.reload(topicmodel)
@@ -107,8 +110,9 @@ async def test_txt(monkeypatch, tmp_path):
         {"data": [{"embedding": [1, 0]}, {"embedding": [0, 1]}]},
         {"data": [{"embedding": [1, 0]}, {"embedding": [0, 1]}]},
     ]
-    monkeypatch.setenv("LLM_CACHE", str(tmp_path / "cache.db"))
+    monkeypatch.setenv("TOPICMODEL_CACHE", str(tmp_path / "cache.db"))
     import importlib
+
     import topicmodel
 
     importlib.reload(topicmodel)
