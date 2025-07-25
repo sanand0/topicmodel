@@ -13,6 +13,7 @@ pip install topicmodel
 Embeddings are cached in the file specified by the `TOPICMODEL_CACHE` environment
 variable. By default it uses `~/.cache/topicmodel/embeddings.db` which works on
 Windows, macOS and Linux.
+OpenAI requests require `OPENAI_API_KEY`. Set `OPENAI_BASE_URL` to use a different host.
 
 ## Usage
 
@@ -48,6 +49,19 @@ topic
 Fruit
 Vegetable
 ```
+**JSON**
+
+```json
+[{"topic": "Fruit"}, {"topic": "Vegetable"}]
+```
+
+**TXT**
+
+```text
+Fruit
+Vegetable
+```
+
 
 ### Examples
 
@@ -57,6 +71,12 @@ Match documents to topics and save JSON:
 uvx topicmodel --docs docs.csv --topics topics.csv --output result.json
 ```
 
+Example output (result.json):
+```json
+[{"doc": "Apples are great", "best_match": "Fruit"}]
+```
+
+
 Discover topics from a TXT file:
 
 ```bash
@@ -64,10 +84,15 @@ uvx topicmodel \
   --docs docs.txt \
   --output result.csv \
   --ntopics 5 \
-  --name_model gpt-4.1-nano \
+  --name_model gpt-4.1-mini \
   --nsamples 3 \
   --truncate 100
 ```
+Example output (result.csv):
+doc	best_match	T1	T2
+foo	T1	1.0	0.0
+bar	T2	0.0	1.0
+
 
 ### Options
 
@@ -79,7 +104,7 @@ uvx topicmodel \
   model for better quality when documents are complex or short.
 - `--ntopics`: Number of topics to discover when `--topics` is not supplied. Increase for
   more granular clusters.
-- `--name_model`: Model used for naming clusters. Defaults to `gpt-4.1-nano`. Use a stronger
+- `--name_model`: Model used for naming clusters. Defaults to `gpt-4.1-mini`. Use a stronger
   model if names lack nuance.
 - `--nsamples`: Documents to show the naming model from each cluster. Higher values may
   improve topic names but increase cost.

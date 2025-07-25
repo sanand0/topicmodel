@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+# Fake httpx client to avoid network calls
 
 class FakeResponse:
     def __init__(self, data):
@@ -33,8 +34,10 @@ class FakeClient:
         return FakeResponse(self._responses.pop(0))
 
 
+# Documents are matched to given topics
 @pytest.mark.asyncio
 async def test_similarity(monkeypatch, tmp_path):
+    """Test matching documents to topics."""
     docs = '[{"t":"a"},{"t":"b"}]'
     topics = '[{"t":"x"},{"t":"y"}]'
     responses = [
@@ -60,7 +63,9 @@ async def test_similarity(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+# Clustering discovers topics from documents
 async def test_cluster(monkeypatch, tmp_path):
+    """Test topic discovery."""
     docs = '[{"t":"a"},{"t":"b"},{"t":"c"},{"t":"d"}]'
     responses = [
         {
@@ -99,9 +104,11 @@ async def test_cluster(monkeypatch, tmp_path):
         {"doc": "d", "best_match": "T2", "T1": 0.0, "T2": 1.0},
     ]
 
-
 @pytest.mark.asyncio
+
+# TXT input is parsed case-insensitively
 async def test_txt(monkeypatch, tmp_path):
+    """Test reading mixed-case TXT and CSV files."""
     docs_file = tmp_path / "docs.TXT"
     docs_file.write_text("a\nb\n")
     topics_file = tmp_path / "topics.csv"
