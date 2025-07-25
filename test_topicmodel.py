@@ -1,12 +1,12 @@
-# usage: uvx --with pytest-asyncio,httpx,pandas,numpy,scikit-learn,tiktoken,tqdm pytest
-
 import json
-
 import pytest
+import importlib
+import topicmodel
 
-# Fake httpx client to avoid network calls
 
 class FakeResponse:
+    """Fake httpx client to avoid network calls"""
+
     def __init__(self, data):
         self._data = data
         self.status_code = 200
@@ -34,7 +34,6 @@ class FakeClient:
         return FakeResponse(self._responses.pop(0))
 
 
-# Documents are matched to given topics
 @pytest.mark.asyncio
 async def test_similarity(monkeypatch, tmp_path):
     """Test matching documents to topics."""
@@ -45,28 +44,24 @@ async def test_similarity(monkeypatch, tmp_path):
         {"data": [{"embedding": [1, 0]}, {"embedding": [0, 1]}]},
     ]
     monkeypatch.setenv("TOPICMODEL_CACHE", str(tmp_path / "cache.db"))
-    import importlib
-
-    import topicmodel
-
     importlib.reload(topicmodel)
     monkeypatch.setattr(topicmodel.httpx, "AsyncClient", lambda *a, **k: FakeClient(responses))
     out = tmp_path / "out.json"
-    await topicmodel.amain(["--docs", docs, "--topics", topics, "--output", str(out)])
+    await topicmodel.amain([docs, "--topics", topics, "--output", str(out)])
     result = json.loads(out.read_text())
     assert result == [
         {"doc": "a", "best_match": "x", "x": 1.0, "y": 0.0},
         {"doc": "b", "best_match": "y", "x": 0.0, "y": 1.0},
     ]
     monkeypatch.setattr(topicmodel.httpx, "AsyncClient", lambda *a, **k: FakeClient([]))
-    await topicmodel.amain(["--docs", docs, "--topics", topics, "--output", str(out)])
+    await topicmodel.amain([docs, "--topics", topics, "--output", str(out)])
 
 
 @pytest.mark.asyncio
-# Clustering discovers topics from documents
 async def test_cluster(monkeypatch, tmp_path):
     """Test topic discovery."""
     docs = '[{"t":"a"},{"t":"b"},{"t":"c"},{"t":"d"}]'
+    message = {"content": '{"topics": [{"id": 1, "topic": "T1"}, {"id": 2, "topic": "T2"}]}'}
     responses = [
         {
             "data": [
@@ -76,26 +71,14 @@ async def test_cluster(monkeypatch, tmp_path):
                 {"embedding": [0, 1]},
             ]
         },
-        {
-            "choices": [
-                {
-                    "message": {
-                        "content": '{"topics": [{"id": 1, "topic": "T1"}, {"id": 2, "topic": "T2"}]}'
-                    }
-                }
-            ]
-        },
+        {"choices": [{"message": message}]},
         {"data": [{"embedding": [1, 0]}, {"embedding": [0, 1]}]},
     ]
     monkeypatch.setenv("TOPICMODEL_CACHE", str(tmp_path / "cache.db"))
-    import importlib
-
-    import topicmodel
-
     importlib.reload(topicmodel)
     monkeypatch.setattr(topicmodel.httpx, "AsyncClient", lambda *a, **k: FakeClient(responses))
     out = tmp_path / "out.json"
-    await topicmodel.amain(["--docs", docs, "--output", str(out), "--ntopics", "2"])
+    await topicmodel.amain([docs, "--output", str(out), "--ntopics", "2"])
     result = json.loads(out.read_text())
     assert result == [
         {"doc": "a", "best_match": "T1", "T1": 1.0, "T2": 0.0},
@@ -104,9 +87,8 @@ async def test_cluster(monkeypatch, tmp_path):
         {"doc": "d", "best_match": "T2", "T1": 0.0, "T2": 1.0},
     ]
 
-@pytest.mark.asyncio
 
-# TXT input is parsed case-insensitively
+@pytest.mark.asyncio
 async def test_txt(monkeypatch, tmp_path):
     """Test reading mixed-case TXT and CSV files."""
     docs_file = tmp_path / "docs.TXT"
@@ -118,23 +100,10 @@ async def test_txt(monkeypatch, tmp_path):
         {"data": [{"embedding": [1, 0]}, {"embedding": [0, 1]}]},
     ]
     monkeypatch.setenv("TOPICMODEL_CACHE", str(tmp_path / "cache.db"))
-    import importlib
-
-    import topicmodel
-
     importlib.reload(topicmodel)
     monkeypatch.setattr(topicmodel.httpx, "AsyncClient", lambda *a, **k: FakeClient(responses))
     out = tmp_path / "out.json"
-    await topicmodel.amain(
-        [
-            "--docs",
-            str(docs_file),
-            "--topics",
-            str(topics_file),
-            "--output",
-            str(out),
-        ]
-    )
+    await topicmodel.amain([str(docs_file), "--topics", str(topics_file), "--output", str(out)])
     result = json.loads(out.read_text())
     assert result == [
         {"doc": "a", "best_match": "x", "x": 1.0, "y": 0.0},

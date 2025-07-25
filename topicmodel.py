@@ -3,6 +3,7 @@
 # dependencies = ["httpx>=0.27", "pandas", "numpy", "scikit-learn", "tiktoken", "tqdm"]
 # ///
 """Cluster documents or match them to topics using OpenAI embeddings."""
+
 from __future__ import annotations
 
 import argparse
@@ -23,10 +24,10 @@ from sklearn.cluster import KMeans
 from tqdm import tqdm
 
 # cache embeddings in a shared SQLite database
-
 cache_path = Path(
     os.getenv("TOPICMODEL_CACHE", Path.home() / ".cache" / "topicmodel" / "embeddings.db")
 )
+
 
 def cache_conn() -> sqlite3.Connection:
     """Return SQLite connection to cache."""
@@ -36,10 +37,9 @@ def cache_conn() -> sqlite3.Connection:
     conn.execute("CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, data BLOB)")
     return conn
 
-# Load data from file or inline text
 
 def load_data(text: str, fmt: str | None = None) -> tuple[pd.DataFrame, str]:
-    """Return DataFrame and key from text or file."""
+    """Load data from .txt, .csv, or .json file and return DataFrame + first column"""
     if os.path.exists(text):
         ext = os.path.splitext(text)[1].lower()
         fmt = {".csv": "csv", ".txt": "txt"}.get(ext, "json")
@@ -52,7 +52,6 @@ def load_data(text: str, fmt: str | None = None) -> tuple[pd.DataFrame, str]:
         df = pd.DataFrame(json.loads(text))
     return df, df.columns[0]
 
-# Compute embeddings in batches to stay under SQLite limits
 
 async def embed(texts: list[str], model: str) -> np.ndarray:
     """Return embeddings for texts, caching results."""
@@ -61,6 +60,7 @@ async def embed(texts: list[str], model: str) -> np.ndarray:
     conn = cache_conn()
     keys = [hashlib.sha256(f"{model}\n{t}".encode()).hexdigest() for t in texts]
     cached: dict[str, np.ndarray] = {}
+    # Check cache in batches to stay under SQLite limit of 32K wildcard keys
     for i in range(0, len(keys), 32000):
         batch = keys[i : i + 32000]
         ph = ",".join("?" * len(batch))
@@ -111,10 +111,9 @@ async def embed(texts: list[str], model: str) -> np.ndarray:
     conn.close()
     return np.stack([cached[k] for k in keys])
 
-# Query the chat model to name clusters
 
 async def chat(model: str, system: str, user: str) -> str:
-    """Return JSON response from a chat completion."""
+    """Query the chat model to name clusters, return JSON response."""
     api_key = os.getenv("OPENAI_API_KEY")
     base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
@@ -156,10 +155,9 @@ async def chat(model: str, system: str, user: str) -> str:
         res.raise_for_status()
     return res.json()["choices"][0]["message"]["content"]
 
-# Compute document-topic similarity scores
 
 async def similarity(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> None:
-    """Write similarity matrix to output."""
+    """Compute document-topic similarity scores. Write similarity matrix to output."""
     docs_df, doc_key = load_data(args.docs)
     topics_df, topic_key = load_data(args.topics)
     docs = docs_df[doc_key].astype(str).tolist()
@@ -188,10 +186,9 @@ async def similarity(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> 
     for row in rows:
         out.write("\t".join(map(str, row)) + "\n")
 
-# Discover topics using KMeans and name them via chat
 
 async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> None:
-    """Cluster documents and name the groups."""
+    """Cluster documents to discover topics and name them via chat()."""
     df, key = load_data(args.docs)
     docs = df[key].astype(str).tolist()
     emb = await embed(docs, args.model)
@@ -216,21 +213,21 @@ async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> Non
     args.docs = json.dumps(df.to_dict(orient="records"))
     await similarity(args, fmt, out)
 
-# Command-line interface
 
 def parse(argv: list[str]) -> argparse.Namespace:
     """Return parsed command line arguments."""
-    p = argparse.ArgumentParser()
-    p.add_argument("--docs", required=True)
-    p.add_argument("--topics")
-    p.add_argument("--output")
-    p.add_argument("--model", default="text-embedding-3-small")
-    p.add_argument("--ntopics", type=int, default=20)
-    p.add_argument("--name_model", default="gpt-4.1-mini")
-    p.add_argument("--nsamples", type=int, default=5)
-    p.add_argument("--truncate", type=int, default=200)
+    p = argparse.ArgumentParser(description="Automatically discover topics from documents")
+    p.add_argument("docs", help="File with docs: .txt, .csv, .json")
+    p.add_argument("--topics", help="File with topics: .txt, .csv, .json")
+    p.add_argument("--output", help="Output file: .txt, .csv, .json")
+    p.add_argument("--model", default="text-embedding-3-small", help="Embedding model")
+    p.add_argument("--name_model", default="gpt-4.1-mini", help="Topic naming model")
+    p.add_argument("--ntopics", type=int, default=20, help="Approx # of topics to generate")
+    p.add_argument("--nsamples", type=int, default=5, help="# docs to send for naming")
+    p.add_argument("--truncate", type=int, default=200, help="Send first N chars of each doc")
     p.add_argument(
         "--prompt",
+        help="Prompt used to name topics",
         default=(
             "Here are clusters of documents. Suggest 2-4 word topic names for each cluster. "
             "Capture the spirit of each cluster. Differentiate from other clusters."
@@ -238,7 +235,6 @@ def parse(argv: list[str]) -> argparse.Namespace:
     )
     return p.parse_args(argv)
 
-# Run either similarity or clustering depending on arguments
 
 async def amain(argv: list[str]) -> None:
     """Run the tool with parsed arguments."""
@@ -261,7 +257,6 @@ async def amain(argv: list[str]) -> None:
         if out is not sys.stdout:
             out.close()
 
-# Entry point for scripts and package
 
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the `topicmodel` script."""
