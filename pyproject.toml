@@ -1,0 +1,28 @@
+[project]
+name = "topicmodel"
+version = "0.1.0"
+authors = [{name = "S Anand", email = "root.node@gmail.com"}]
+description = "Semantic document clustering and topic labeling"
+readme = "README.md"
+py-modules = ["topicmodel"]
+requires-python = ">=3.12"
+license = {text = "MIT"}
+dependencies = [
+  "httpx>=0.27",
+  "pandas",
+  "numpy",
+  "scikit-learn",
+  "tiktoken",
+  "tqdm",
+]
+
+[project.scripts]
+topicmodel = "topicmodel:main"
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.ruff]
+line-length = 100
+extend-select = ["I"]
