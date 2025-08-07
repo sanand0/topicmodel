@@ -92,13 +92,10 @@ async def embed(texts: list[str], model: str) -> np.ndarray:
         result = []
         async with httpx.AsyncClient(timeout=300) as client:
             for chunk in tqdm(chunks, desc="embed", unit="doc"):
-                res = await client.post(
-                    f"{base}/embeddings",
-                    headers=headers,
-                    json={"model": model, "input": chunk},
-                )
+                payload = {"model": model, "input": chunk}
+                res = await client.post(f"{base}/embeddings", headers=headers, json=payload)
                 if res.status_code != 200:
-                    print(res.text)
+                    print(f"URL: {base}/embeddings\nREQUEST\n{payload}\n\nRESPONSE\n{res.text}")
                 res.raise_for_status()
                 result.extend([d["embedding"] for d in res.json()["data"]])
         for (key, _), emb in zip(missing, result):
@@ -151,7 +148,7 @@ async def chat(model: str, system: str, user: str) -> str:
     async with httpx.AsyncClient(timeout=300) as client:
         res = await client.post(f"{base}/chat/completions", headers=headers, json=payload)
         if res.status_code != 200:
-            print(res.text)
+            print(f"URL: {base}/chat/completions\nREQUEST\n{payload}\n\nRESPONSE\n{res.text}")
         res.raise_for_status()
     return res.json()["choices"][0]["message"]["content"]
 
@@ -216,7 +213,10 @@ async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> Non
 
 def parse(argv: list[str]) -> argparse.Namespace:
     """Return parsed command line arguments."""
-    p = argparse.ArgumentParser(description="Automatically discover topics from documents")
+    p = argparse.ArgumentParser(
+        description="Automatically discover topics from documents",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     p.add_argument("docs", help="File with docs: .txt, .csv, .json")
     p.add_argument("--topics", help="File with topics: .txt, .csv, .json")
     p.add_argument("--output", help="Output file: .txt, .csv, .json")

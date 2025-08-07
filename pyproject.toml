@@ -1,6 +1,6 @@
 [project]
 name = "topicmodel"
-version = "0.1.0"
+version = "0.1.1"
 authors = [{name = "S Anand", email = "root.node@gmail.com"}]
 description = "Semantic document clustering and topic labeling"
 readme = "README.md"

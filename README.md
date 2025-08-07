@@ -116,6 +116,11 @@ uv publish
 
 This is deployed to [pypi](https://pypi.org/project/topicmodel/) as [Anand.S](https://pypi.org/user/Anand.S/)
 
+## Change log
+
+- [0.1.1](https://pypi.org/project/topicmodel/0.1.01): 07 Aug 2025. Help shows defaults. Informative errors. More tests
+- [0.1.0](https://pypi.org/project/topicmodel/0.1.0/): 25 Jul 2025. Initial release
+
 ## License
 
 [MIT](LICENSE)
