@@ -39,7 +39,7 @@ def cache_conn() -> sqlite3.Connection:
 
 
 def load_data(text: str, fmt: str | None = None) -> tuple[pd.DataFrame, str]:
-    """Load data from .txt, .csv, or .json file and return DataFrame + first column"""
+    """Load .txt, .csv, .json file or JSON string and return DataFrame + first column"""
     if os.path.exists(text):
         ext = os.path.splitext(text)[1].lower()
         fmt = {".csv": "csv", ".txt": "txt"}.get(ext, "json")
@@ -166,14 +166,14 @@ async def similarity(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> 
     if fmt == "json":
         rows = []
         for doc, match, row in zip(docs, best, sim):
-            data = {"doc": doc, "best_match": match}
+            data = {"doc": doc, "best_match": match, "best_score": float(row.max())}
             data.update({t: float(v) for t, v in zip(topics, row)})
             rows.append(data)
         json.dump(rows, out, indent=2)
         out.write("\n")
         return
-    header = [doc_key, "best_match", *topics]
-    rows = [[d, m, *[f"{v:.5f}" for v in r]] for d, m, r in zip(docs, best, sim)]
+    header = [doc_key, "best_match", "best_score", *topics]
+    rows = [[d, m, f"{r.max():.5f}", *[f"{v:.5f}" for v in r]] for d, m, r in zip(docs, best, sim)]
     if fmt == "csv":
         writer = csv.writer(out)
         writer.writerow(header)
@@ -246,7 +246,7 @@ async def amain(argv: list[str]) -> None:
         ext = Path(args.output).suffix.lower()
         fmt = ext_map.get(ext)
         if not fmt:
-            raise SystemExit("output must end with .csv, .json or .txt")
+            raise SystemExit(f"Output {args.output} must end with .csv, .json or .txt")
         out = open(args.output, "w")
     try:
         if args.topics:

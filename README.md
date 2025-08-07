@@ -29,15 +29,18 @@ Run:
 uvx topicmodel docs.txt --ntopics=2
 ```
 
-It groups each line into 2 _auto-discovered_ topics (e.g. "Celestial and Planetary Facts" and "Cooking and Aromatics") and print something like:
+It groups each line into 2 _auto-discovered_ topics and print something like:
 
-| text                        | best_match                    | Celestial and Planetary Facts | Cooking and Aromatics |
-| --------------------------- | ----------------------------- | ----------------------------: | --------------------: |
-| Mars has a thin atmosphere. | Celestial and Planetary Facts |                       0.29329 |               0.09759 |
-| The moon orbits Earth.      | Celestial and Planetary Facts |                       0.33986 |               0.00704 |
-| Stars shine at night.       | Celestial and Planetary Facts |                       0.34402 |               0.10109 |
-| Bread needs yeast.          | Cooking and Aromatics         |                       0.04018 |               0.16585 |
-| Basil smells fresh.         | Cooking and Aromatics         |                       0.05278 |               0.30279 |
+1: Space and Astronomy
+2: Food and Ingredients
+
+| text                        | best_match           | best_score | Space and Astronomy | Food and Ingredients |
+| --------------------------- | -------------------- | ---------: | ------------------: | -------------------: |
+| Mars has a thin atmosphere. | Space and Astronomy  |    0.28224 |             0.28224 |              0.06313 |
+| The moon orbits Earth.      | Space and Astronomy  |    0.26560 |             0.26560 |              0.00546 |
+| Stars shine at night.       | Space and Astronomy  |    0.32462 |             0.32462 |              0.04896 |
+| Bread needs yeast.          | Food and Ingredients |    0.28357 |             0.02198 |              0.28357 |
+| Basil smells fresh.         | Food and Ingredients |    0.20560 |             0.06859 |              0.20560 |
 
 The `best_match` column is the closest topic to the text. The rest of the columns are the similarity between the text and each topic.
 
@@ -68,10 +71,11 @@ This groups each line into the 2 topics in `topics.txt` along with the similarit
 
 ## Options
 
-- `--docs`: File containing documents. Required. Can be `.txt`, `.csv` or `.json`
+- `--docs`: File containing documents. Required. Can be `.txt`, `.csv` or `.json` file or a JSON string
   - `.txt`: Each line is treated as a document.
   - `.csv`: Each row is treated as a document. Only the first column is used.
   - `.json`: This should have an array of objects. Only the first key is used. Example: `[{"text": "Apples are great"}, {"text": "Bananas are yellow"}]`
+  - JSON string: You can pass the the JSON directly as input. Example: `uvx topicmodel '[{"text": "Apple"}, {"text": "Banana"}]' --ntopics 2`
 - `--topics`: Optional file with existing topics you want to match with. Can be `.txt`, `.csv` or `.json`
 - `--output`: Path to save results. Can be `.csv`, `.json` or `.txt`.
 - `--model`: Default: `text-embedding-3-small`. OpenAI embedding model. Use `text-embedding-3-large` for higher quality.
@@ -118,7 +122,8 @@ This is deployed to [pypi](https://pypi.org/project/topicmodel/) as [Anand.S](ht
 
 ## Change log
 
-- [0.1.1](https://pypi.org/project/topicmodel/0.1.01): 07 Aug 2025. Help shows defaults. Informative errors. More tests
+- [0.1.2](https://pypi.org/project/topicmodel/0.1.2/): 07 Aug 2025. Include `best_score` in output
+- [0.1.1](https://pypi.org/project/topicmodel/0.1.1/): 07 Aug 2025. Help shows defaults. Informative errors. More tests
 - [0.1.0](https://pypi.org/project/topicmodel/0.1.0/): 25 Jul 2025. Initial release
 
 ## License

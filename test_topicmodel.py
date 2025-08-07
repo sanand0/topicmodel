@@ -54,8 +54,8 @@ async def test_similarity(monkeypatch, tmp_path):
     await topicmodel.amain([docs, "--topics", topics, "--output", str(out)])
     result = json.loads(out.read_text())
     assert result == [
-        {"doc": "a", "best_match": "x", "x": 1.0, "y": 0.0},
-        {"doc": "b", "best_match": "y", "x": 0.0, "y": 1.0},
+        {"doc": "a", "best_match": "x", "best_score": 1.0, "x": 1.0, "y": 0.0},
+        {"doc": "b", "best_match": "y", "best_score": 1.0, "x": 0.0, "y": 1.0},
     ]
     monkeypatch.setattr(topicmodel.httpx, "AsyncClient", lambda *a, **k: FakeClient([]))
     await topicmodel.amain([docs, "--topics", topics, "--output", str(out)])
@@ -85,10 +85,10 @@ async def test_cluster(monkeypatch, tmp_path):
     await topicmodel.amain([docs, "--output", str(out), "--ntopics", "2"])
     result = json.loads(out.read_text())
     assert result == [
-        {"doc": "a", "best_match": "T1", "T1": 1.0, "T2": 0.0},
-        {"doc": "b", "best_match": "T1", "T1": 1.0, "T2": 0.0},
-        {"doc": "c", "best_match": "T2", "T1": 0.0, "T2": 1.0},
-        {"doc": "d", "best_match": "T2", "T1": 0.0, "T2": 1.0},
+        {"doc": "a", "best_match": "T1", "best_score": 1.0, "T1": 1.0, "T2": 0.0},
+        {"doc": "b", "best_match": "T1", "best_score": 1.0, "T1": 1.0, "T2": 0.0},
+        {"doc": "c", "best_match": "T2", "best_score": 1.0, "T1": 0.0, "T2": 1.0},
+        {"doc": "d", "best_match": "T2", "best_score": 1.0, "T1": 0.0, "T2": 1.0},
     ]
 
 
@@ -110,8 +110,8 @@ async def test_txt(monkeypatch, tmp_path):
     await topicmodel.amain([str(docs_file), "--topics", str(topics_file), "--output", str(out)])
     result = json.loads(out.read_text())
     assert result == [
-        {"doc": "a", "best_match": "x", "x": 1.0, "y": 0.0},
-        {"doc": "b", "best_match": "y", "x": 0.0, "y": 1.0},
+        {"doc": "a", "best_match": "x", "best_score": 1.0, "x": 1.0, "y": 0.0},
+        {"doc": "b", "best_match": "y", "best_score": 1.0, "x": 0.0, "y": 1.0},
     ]
 
 
@@ -134,9 +134,12 @@ async def test_csv_output(monkeypatch, tmp_path):
     with out_csv.open(newline="") as f:
         reader = csv.reader(f)
         header = next(reader)
-        assert header == ["t", "best_match", "x", "y"]
+        assert header == ["t", "best_match", "best_score", "x", "y"]
         rows = list(reader)
-        assert rows == [["a", "x", "1.00000", "0.00000"], ["b", "y", "0.00000", "1.00000"]]
+        assert rows == [
+            ["a", "x", "1.00000", "1.00000", "0.00000"],
+            ["b", "y", "1.00000", "0.00000", "1.00000"],
+        ]
 
 
 def test_help_defaults(capsys):
