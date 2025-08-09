@@ -221,7 +221,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--topics", help="File with topics: .txt, .csv, .json")
     p.add_argument("--output", help="Output file: .txt, .csv, .json")
     p.add_argument("--model", default="text-embedding-3-small", help="Embedding model")
-    p.add_argument("--name_model", default="gpt-4.1-mini", help="Topic naming model")
+    p.add_argument("--name_model", default="gpt-5-mini", help="Topic naming model")
     p.add_argument("--ntopics", type=int, default=20, help="Approx # of topics to generate")
     p.add_argument("--nsamples", type=int, default=5, help="# docs to send for naming")
     p.add_argument("--truncate", type=int, default=200, help="Send first N chars of each doc")
