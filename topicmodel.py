@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["httpx>=0.27", "pandas", "numpy", "scikit-learn", "tiktoken", "tqdm"]
+# dependencies = ["httpx>=0.27", "pandas", "numpy", "scikit-learn", "tiktoken", "tqdm", "umap-learn", "matplotlib"]
 # ///
 """Cluster documents or match them to topics using OpenAI embeddings."""
 
@@ -22,6 +22,9 @@ import pandas as pd
 import tiktoken
 from sklearn.cluster import KMeans
 from tqdm import tqdm
+import umap
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 # cache embeddings in a shared SQLite database
 cache_path = Path(
@@ -184,6 +187,51 @@ async def similarity(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> 
         out.write("\t".join(map(str, row)) + "\n")
 
 
+def visualize_embeddings(emb: np.ndarray, labels: np.ndarray, topics: list[str], filename: str) -> None:
+    """Project embeddings into 2D using UMAP and visualize clusters with topic names."""
+    reducer = umap.UMAP(n_components=2)
+    emb_2d = reducer.fit_transform(emb)
+
+    plt.figure(figsize=(10, 8))
+    scatter = plt.scatter(
+        emb_2d[:, 0],
+        emb_2d[:, 1],
+        c=labels,
+        cmap="Dark2",
+        s=80,
+        alpha=1,
+        edgecolors="k",
+    )
+
+    plt.xlabel("UMAP_1")
+    plt.ylabel("UMAP_2")
+    plt.title("Document Clusters (UMAP projection)")
+
+    if len(topics) <= 10:
+        cmap = plt.colormaps.get_cmap("Dark2").resampled(len(topics))
+        handles = [
+            Line2D(
+                [0], [0],
+                marker="o", color="w",
+                markerfacecolor=cmap(i),
+                markersize=8,
+                label=topic
+            )
+            for i, topic in enumerate(topics)
+        ]
+        plt.legend(
+            handles=handles,
+            title="Topics",
+            bbox_to_anchor=(1.05, 1),
+            loc="upper left"
+        )
+    else:
+        plt.colorbar(scatter, label="Cluster ID")
+
+    plt.tight_layout()
+    plt.savefig(filename, format=Path(filename).suffix.lstrip("."), bbox_inches="tight")
+
+
 async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> None:
     """Cluster documents to discover topics and name them via chat()."""
     df, key = load_data(args.docs)
@@ -210,6 +258,9 @@ async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> Non
     args.docs = json.dumps(df.to_dict(orient="records"))
     await similarity(args, fmt, out)
 
+    if args.plot:
+        visualize_embeddings(emb, km.labels_, topics, args.plot)
+
 
 def parse(argv: list[str]) -> argparse.Namespace:
     """Return parsed command line arguments."""
@@ -225,6 +276,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--ntopics", type=int, default=20, help="Approx # of topics to generate")
     p.add_argument("--nsamples", type=int, default=5, help="# docs to send for naming")
     p.add_argument("--truncate", type=int, default=200, help="Send first N chars of each doc")
+    p.add_argument("--plot", type=str, help="Visualize document clusters using UMAP")
     p.add_argument(
         "--prompt",
         help="Prompt used to name topics",
