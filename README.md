@@ -79,10 +79,11 @@ This groups each line into the 2 topics in `topics.txt` along with the similarit
 - `--topics`: Optional file with existing topics you want to match with. Can be `.txt`, `.csv` or `.json`
 - `--output`: Path to save results. Can be `.csv`, `.json` or `.txt`.
 - `--model`: Default: `text-embedding-3-small`. OpenAI embedding model. Use `text-embedding-3-large` for higher quality.
-- `--name_model`: Default: `gpt-4.1-mini`. Model to name clusters.
+- `--name_model`: Default: `gpt-5-mini`. Model to name clusters.
 - `--ntopics`: Default: 20. Approx. number of topics to auto-discover. Increase for more granular clusters.
 - `--nsamples`: Default: 5. Documents to show the naming model from each cluster. Higher values may improve topic names but increase cost.
 - `--truncate`: Default: 200. Characters from each document to send to the naming model. Adjust based on document length; shorter saves tokens.
+- `--plot`: Optional. Save UMAP cluster visualization to the specified filename (.svg, .png).
 - `--prompt`: Prompt sent to the naming model. Modify to control naming style.
 
 The default `--prompt` is:
