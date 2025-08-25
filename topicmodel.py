@@ -189,39 +189,65 @@ async def similarity(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> 
 
 def visualize_embeddings(emb: np.ndarray, labels: np.ndarray, topics: list[str], filename: str) -> None:
     """Project embeddings into 2D using UMAP and visualize clusters with topic names."""
-    reducer = umap.UMAP(n_components=2)
+    rows = emb.shape[0]
+    if rows <= 1:
+        print("Not enough data points to visualize")
+        return
+        
+    umap_neighbors = min(15, rows - 1)
+    reducer = umap.UMAP(n_components=2, n_neighbors=umap_neighbors)
     emb_2d = reducer.fit_transform(emb)
 
-    clf = KNeighborsClassifier(n_neighbors=10)
+    n_neighbors = min(3, rows - 1)
+    clf = KNeighborsClassifier(n_neighbors=n_neighbors)
     clf.fit(emb_2d, labels)
 
     x_min, x_max = emb_2d[:, 0].min() - 1, emb_2d[:, 0].max() + 1
     y_min, y_max = emb_2d[:, 1].min() - 1, emb_2d[:, 1].max() + 1
+    h = min((x_max - x_min) / 100, (y_max - y_min) / 100)
     xx, yy = np.meshgrid(
-        np.linspace(x_min, x_max, 500),
-        np.linspace(y_min, y_max, 500),
+        np.arange(x_min, x_max, h),
+        np.arange(y_min, y_max, h),
     )
+    
     Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
     Z = Z.reshape(xx.shape)
 
-    palette = sns.color_palette("hsv", len(topics))
-
-    plt.figure(figsize=(8, 6))
-    plt.contourf(xx, yy, Z, alpha=0.4, levels=len(topics), colors=palette)
-
-    for i, topic in enumerate(topics):
+    n_clusters = len(np.unique(labels))
+    palette = sns.color_palette("Set1", n_clusters)
+    
+    plt.figure(figsize=(12, 8))
+    
+    for i in range(n_clusters):
         mask = Z == i
-        if np.any(mask):
-            cx = xx[mask].mean()
-            cy = yy[mask].mean()
-            plt.text(cx,cy,topic,fontsize=10,ha="center",va="center",bbox=dict(facecolor="lightgrey", alpha=0.8, edgecolor="none", boxstyle="round,pad=0.3"))
+        plt.contourf(xx, yy, mask.astype(int), levels=[0.5, 1.5], 
+                    colors=[palette[i]], alpha=0.6)
+    
+    for i, topic in enumerate(topics):
+        cluster_mask = Z == i
+        if np.any(cluster_mask):
+            y_coords, x_coords = np.where(cluster_mask)
+            region_x = x_coords * h + x_min
+            region_y = y_coords * h + y_min
+            
+            centroid_x = region_x.mean()
+            centroid_y = region_y.mean()
+            
+            plt.annotate(topic, 
+                        (centroid_x, centroid_y),
+                        fontsize=12, fontweight='bold',
+                        bbox=dict(boxstyle="round,pad=0.5", facecolor='white', 
+                                alpha=0.9, edgecolor='black'),
+                        ha='center', va='center')
 
-    plt.title("Document Clusters", fontsize=14)
-    plt.xticks([])
-    plt.yticks([])
+    plt.title("Document Clusters", fontsize=16, fontweight='bold')
+    plt.xlabel("UMAP Dimension 1", fontsize=12)
+    plt.ylabel("UMAP Dimension 2", fontsize=12)
+    
     plt.tight_layout()
-    plt.savefig(filename, dpi=300)
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()
+    print(f"\nVisualization saved to {filename}")
 
 
 async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> None:
@@ -264,7 +290,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--topics", help="File with topics: .txt, .csv, .json")
     p.add_argument("--output", help="Output file: .txt, .csv, .json")
     p.add_argument("--model", default="text-embedding-3-small", help="Embedding model")
-    p.add_argument("--name_model", default="gpt-5-mini", help="Topic naming model")
+    p.add_argument("--name_model", default="gpt-4.1-nano", help="Topic naming model")
     p.add_argument("--ntopics", type=int, default=20, help="Approx # of topics to generate")
     p.add_argument("--nsamples", type=int, default=5, help="# docs to send for naming")
     p.add_argument("--truncate", type=int, default=200, help="Send first N chars of each doc")
