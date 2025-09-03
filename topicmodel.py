@@ -24,7 +24,7 @@ from tqdm import tqdm
 import umap
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
 
 # cache embeddings in a shared SQLite database
 cache_path = Path(
@@ -197,14 +197,15 @@ def visualize_embeddings(emb: np.ndarray, labels: np.ndarray, topics: list[str],
     umap_neighbors = min(15, rows - 1)
     reducer = umap.UMAP(n_components=2, n_neighbors=umap_neighbors)
     emb_2d = reducer.fit_transform(emb)
-
-    n_neighbors = min(3, rows - 1)
-    clf = KNeighborsClassifier(n_neighbors=n_neighbors)
+    
+    clf = SVC(kernel='rbf', gamma='auto', probability=True)
     clf.fit(emb_2d, labels)
-
+    
     x_min, x_max = emb_2d[:, 0].min() - 1, emb_2d[:, 0].max() + 1
     y_min, y_max = emb_2d[:, 1].min() - 1, emb_2d[:, 1].max() + 1
-    h = min((x_max - x_min) / 100, (y_max - y_min) / 100)
+    
+    h = min((x_max - x_min) / 2000, (y_max - y_min) / 2000)
+    
     xx, yy = np.meshgrid(
         np.arange(x_min, x_max, h),
         np.arange(y_min, y_max, h),
@@ -212,16 +213,15 @@ def visualize_embeddings(emb: np.ndarray, labels: np.ndarray, topics: list[str],
     
     Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
     Z = Z.reshape(xx.shape)
-
     n_clusters = len(np.unique(labels))
-    palette = sns.color_palette("Set1", n_clusters)
+    palette = sns.color_palette("Set2", n_clusters)
     
     plt.figure(figsize=(12, 8))
     
     for i in range(n_clusters):
         mask = Z == i
         plt.contourf(xx, yy, mask.astype(int), levels=[0.5, 1.5], 
-                    colors=[palette[i]], alpha=0.6)
+                    colors=[palette[i]], alpha=0.5)
     
     for i, topic in enumerate(topics):
         cluster_mask = Z == i
@@ -239,17 +239,15 @@ def visualize_embeddings(emb: np.ndarray, labels: np.ndarray, topics: list[str],
                         bbox=dict(boxstyle="round,pad=0.5", facecolor='white', 
                                 alpha=0.9, edgecolor='black'),
                         ha='center', va='center')
-
     plt.title("Document Clusters", fontsize=16, fontweight='bold')
     plt.xlabel("UMAP Dimension 1", fontsize=12)
     plt.ylabel("UMAP Dimension 2", fontsize=12)
     
     plt.tight_layout()
-    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    plt.savefig(filename, bbox_inches='tight', dpi=200)
     plt.close()
     print(f"\nVisualization saved to {filename}")
-
-
+    
 async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> None:
     """Cluster documents to discover topics and name them via chat()."""
     df, key = load_data(args.docs)
