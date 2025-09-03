@@ -17,6 +17,7 @@ dependencies = [
   "umap-learn>=0.5.6",
   "llvmlite>=0.43",
   "matplotlib",
+  "scipy",
 ]
 
 [project.scripts]

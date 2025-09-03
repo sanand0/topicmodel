@@ -10,6 +10,7 @@
 #     "umap-learn>=0.5.6",
 #     "llvmlite>=0.43",
 #     "matplotlib",
+#     "scipy",
 # ]
 # ///
 """Cluster documents or match them to topics using OpenAI embeddings."""
@@ -198,7 +199,9 @@ async def similarity(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> 
         out.write("\t".join(map(str, row)) + "\n")
 
 
-def plot_som(emb: np.ndarray, labels: np.ndarray, names: list[str], path: str) -> None:
+def plot_som(
+    emb: np.ndarray, labels: np.ndarray, names: list[str], path: str, smooth: float
+) -> None:
     """Save UMAP+KNN self-organizing map as SVG."""
     import matplotlib.pyplot as plt
     import umap
@@ -215,7 +218,7 @@ def plot_som(emb: np.ndarray, labels: np.ndarray, names: list[str], path: str) -
     xx, yy = np.meshgrid(xs, ys)
     pred = knn.predict(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
     cmap = plt.get_cmap("tab20", len(names))
-    plt.rcParams["path.simplify_threshold"] = 1.0
+    plt.rcParams["path.simplify_threshold"] = smooth
     plt.figure()
     plt.contourf(
         xx,
@@ -263,7 +266,7 @@ async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> Non
     for i, name in enumerate(topics, 1):
         print(f"{i}: {name}")
     if args.plot_som:
-        plot_som(emb, km.labels_, topics, args.plot_som)
+        plot_som(emb, km.labels_, topics, args.plot_som, args.som_smooth)
     args.topics = json.dumps([{key: t} for t in topics])
     args.docs = json.dumps(df.to_dict(orient="records"))
     await similarity(args, fmt, out)
@@ -284,6 +287,12 @@ def parse(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--nsamples", type=int, default=5, help="# docs to send for naming")
     p.add_argument("--truncate", type=int, default=200, help="Send first N chars of each doc")
     p.add_argument("--plot_som", help="Save UMAP/KNN cluster map to SVG")
+    p.add_argument(
+        "--som_smooth",
+        type=float,
+        default=1.0,
+        help="Path simplification factor for --plot_som",
+    )
     p.add_argument(
         "--prompt",
         help="Prompt used to name topics",

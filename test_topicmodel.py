@@ -224,5 +224,7 @@ async def test_plot_som(monkeypatch, tmp_path):
         "2",
         "--plot_som",
         str(out_svg),
+        "--som_smooth",
+        "0.5",
     ])
     assert out_svg.exists() and "<svg" in out_svg.read_text()
