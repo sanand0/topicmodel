@@ -248,6 +248,51 @@ def visualize_embeddings(emb: np.ndarray, labels: np.ndarray, topics: list[str],
     plt.close()
     print(f"\nVisualization saved to {filename}")
     
+
+
+async def hierarchical_paths(args: argparse.Namespace, topics: list[str], query: str) -> list[str]:
+    """Build user prompt and fetch hierarchical paths from LLM."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+    user_prompt = f"""
+You are given a list of topic names. 
+Your task is to return hierarchical topic paths for any user query.
+
+Rules:
+1. Always organize topics into logical parent-child hierarchies (broad → specific).
+2. If user asks for "N-level parent", return the topic with N parent levels above it.
+   Example: Topic = "Python", if "2-level parent" → "Programming / Python". 
+            If "3-level depth" → "Computer Science / Programming / Python".
+3. Always format output as a path using " / " as the separator.
+4. Do not add extra explanation, only return the hierarchy paths.
+5. If the topic can belong to multiple parents, choose the most natural and common hierarchy.
+
+Input Topics:
+{chr(10).join(topics)}
+
+User Query: {query}
+
+Return strictly in hierarchy paths according to the query.
+"""
+    payload = {
+        "model": "gpt-5-mini",
+        "messages": [
+            {"role": "user", "content": user_prompt},
+        ]
+    }
+    async with httpx.AsyncClient(timeout=300) as client:
+        res = await client.post(f"{base}/chat/completions", headers=headers, json=payload)
+        if res.status_code != 200:
+            print(f"URL: {base}/chat/completions\nREQUEST\n{payload}\n\nRESPONSE\n{res.text}")
+        res.raise_for_status()
+
+    output_text = res.json()["choices"][0]["message"]["content"]
+    return [line.strip() for line in output_text.split("\n") if line.strip()]
+
+
+    
 async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> None:
     """Cluster documents to discover topics and name them via chat()."""
     df, key = load_data(args.docs)
@@ -270,12 +315,21 @@ async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> Non
     topics = [n.get("topic", f"Topic {i + 1}") for i, n in enumerate(names)]
     for i, name in enumerate(topics, 1):
         print(f"{i}: {name}")
+
+    if args.hierarchy:
+        paths = await hierarchical_paths(args, topics, args.hierarchy)
+        print("\nHierarchical Paths:")
+        for p in paths:
+            print(p)
+        print("\n")
+    
     args.topics = json.dumps([{key: t} for t in topics])
     args.docs = json.dumps(df.to_dict(orient="records"))
     await similarity(args, fmt, out)
 
     if args.plot:
         visualize_embeddings(emb, km.labels_, topics, args.plot)
+
 
 
 def parse(argv: list[str]) -> argparse.Namespace:
@@ -293,6 +347,11 @@ def parse(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--nsamples", type=int, default=5, help="# docs to send for naming")
     p.add_argument("--truncate", type=int, default=200, help="Send first N chars of each doc")
     p.add_argument("--plot", type=str, help="Visualize document clusters")
+    p.add_argument(
+        "--hierarchy", 
+        type=str, 
+        help='Hierarchy structure requirement, e.g., "Max 3 levels", "2 level depth", "organize by Dewey system"'
+    )
     p.add_argument(
         "--prompt",
         help="Prompt used to name topics",
