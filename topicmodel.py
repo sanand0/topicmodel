@@ -1,6 +1,16 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["httpx>=0.27", "pandas", "numpy", "scikit-learn", "tiktoken", "tqdm"]
+# dependencies = [
+#     "httpx>=0.27",
+#     "pandas",
+#     "numpy",
+#     "scikit-learn",
+#     "tiktoken",
+#     "tqdm",
+#     "umap-learn>=0.5.6",
+#     "llvmlite>=0.43",
+#     "matplotlib",
+# ]
 # ///
 """Cluster documents or match them to topics using OpenAI embeddings."""
 
@@ -16,7 +26,11 @@ import sqlite3
 import sys
 from pathlib import Path
 
-import httpx
+try:
+    import httpx
+except ModuleNotFoundError:  # pragma: no cover
+    class httpx:  # type: ignore
+        AsyncClient = object
 import numpy as np
 import pandas as pd
 import tiktoken
@@ -184,6 +198,48 @@ async def similarity(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> 
         out.write("\t".join(map(str, row)) + "\n")
 
 
+def plot_som(emb: np.ndarray, labels: np.ndarray, names: list[str], path: str) -> None:
+    """Save UMAP+KNN self-organizing map as SVG."""
+    import matplotlib.pyplot as plt
+    import umap
+    from scipy import ndimage
+    from sklearn.neighbors import KNeighborsClassifier
+
+    coords = umap.UMAP(random_state=0).fit_transform(emb)
+    knn = KNeighborsClassifier(15).fit(coords, labels)
+    x0, x1 = coords[:, 0].min(), coords[:, 0].max()
+    y0, y1 = coords[:, 1].min(), coords[:, 1].max()
+    dx, dy = x1 - x0, y1 - y0
+    xs = np.linspace(x0 - 0.05 * dx, x1 + 0.05 * dx, 256)
+    ys = np.linspace(y0 - 0.05 * dy, y1 + 0.05 * dy, 256)
+    xx, yy = np.meshgrid(xs, ys)
+    pred = knn.predict(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
+    cmap = plt.get_cmap("tab20", len(names))
+    plt.rcParams["path.simplify_threshold"] = 1.0
+    plt.figure()
+    plt.contourf(
+        xx,
+        yy,
+        pred,
+        levels=np.arange(len(names) + 1) - 0.5,
+        colors=[cmap(i) for i in range(len(names))],
+    )
+    plt.scatter(coords[:, 0], coords[:, 1], c=labels, s=5, cmap=cmap)
+    for i, name in enumerate(names):
+        mask = pred == i
+        lab, num = ndimage.label(mask)
+        if num:
+            counts = np.bincount(lab.ravel())[1:]
+            region = np.argmax(counts) + 1
+            idx = np.column_stack(np.nonzero(lab == region))
+            cx = xx[idx[:, 0], idx[:, 1]].mean()
+            cy = yy[idx[:, 0], idx[:, 1]].mean()
+            plt.text(cx, cy, name, ha="center", va="center", color="black")
+    plt.axis("off")
+    plt.savefig(path, format="svg", bbox_inches="tight")
+    plt.close()
+
+
 async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> None:
     """Cluster documents to discover topics and name them via chat()."""
     df, key = load_data(args.docs)
@@ -206,6 +262,8 @@ async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> Non
     topics = [n.get("topic", f"Topic {i + 1}") for i, n in enumerate(names)]
     for i, name in enumerate(topics, 1):
         print(f"{i}: {name}")
+    if args.plot_som:
+        plot_som(emb, km.labels_, topics, args.plot_som)
     args.topics = json.dumps([{key: t} for t in topics])
     args.docs = json.dumps(df.to_dict(orient="records"))
     await similarity(args, fmt, out)
@@ -225,6 +283,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--ntopics", type=int, default=20, help="Approx # of topics to generate")
     p.add_argument("--nsamples", type=int, default=5, help="# docs to send for naming")
     p.add_argument("--truncate", type=int, default=200, help="Send first N chars of each doc")
+    p.add_argument("--plot_som", help="Save UMAP/KNN cluster map to SVG")
     p.add_argument(
         "--prompt",
         help="Prompt used to name topics",

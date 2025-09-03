@@ -1,7 +1,9 @@
 import csv
 import importlib
 import json
+
 import pytest
+
 import topicmodel
 
 
@@ -193,3 +195,34 @@ async def test_chat_error_logging(monkeypatch, capsys, tmp_path):
 
     log = capsys.readouterr().out
     assert "chat/completions" in log and "REQUEST" in log and "Bad request" in log
+
+
+@pytest.mark.asyncio
+async def test_plot_som(monkeypatch, tmp_path):
+    """--plot_som should create a non-empty SVG."""
+    docs = '[{"t":"a"},{"t":"b"},{"t":"c"},{"t":"d"}]'
+    message = {"content": '{"topics": [{"id": 1, "topic": "T1"}, {"id": 2, "topic": "T2"}]}' }
+    responses = [
+        {"data": [
+            {"embedding": [1, 0]},
+            {"embedding": [1, 0]},
+            {"embedding": [0, 1]},
+            {"embedding": [0, 1]},
+        ]},
+        {"choices": [{"message": message}]},
+        {"data": [{"embedding": [1, 0]}, {"embedding": [0, 1]}]},
+    ]
+    monkeypatch.setenv("TOPICMODEL_CACHE", str(tmp_path / "cache.db"))
+    importlib.reload(topicmodel)
+    monkeypatch.setattr(topicmodel.httpx, "AsyncClient", lambda *a, **k: FakeClient(responses))
+    out_svg = tmp_path / "plot.svg"
+    await topicmodel.amain([
+        docs,
+        "--output",
+        str(tmp_path / "o.json"),
+        "--ntopics",
+        "2",
+        "--plot_som",
+        str(out_svg),
+    ])
+    assert out_svg.exists() and "<svg" in out_svg.read_text()
