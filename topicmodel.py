@@ -143,7 +143,6 @@ async def chat(model: str, system: str, user: str) -> str:
                 },
             },
         },
-        "temperature": 0,
     }
     async with httpx.AsyncClient(timeout=300) as client:
         res = await client.post(f"{base}/chat/completions", headers=headers, json=payload)
@@ -200,7 +199,11 @@ async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> Non
         }
         for i in range(args.ntopics)
     ]
-    system = f'{args.prompt}\nReturn JSON {{"topics": [{{"id": integer, "topic": string}}]}}'
+    prompt = args.prompt
+    if args.hierarchy:
+        prompt += f"""\nName topics as hierarchies separated by ` / `, e.g. parent / child / ... . {args.hierarchy}"""
+
+    system = f'{prompt}\nReturn JSON {{"topics": [{{"id": integer, "topic": string}}]}}'
     names = json.loads(await chat(args.name_model, system, json.dumps(samples))).get("topics", [])
     names = sorted(names, key=lambda d: d.get("id", 0))[: args.ntopics]
     topics = [n.get("topic", f"Topic {i + 1}") for i, n in enumerate(names)]
@@ -225,6 +228,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--ntopics", type=int, default=20, help="Approx # of topics to generate")
     p.add_argument("--nsamples", type=int, default=5, help="# docs to send for naming")
     p.add_argument("--truncate", type=int, default=200, help="Send first N chars of each doc")
+    p.add_argument("--hierarchy", nargs="?", const="2 level depth", help="Instruction to create hierarchical topic names")
     p.add_argument(
         "--prompt",
         help="Prompt used to name topics",

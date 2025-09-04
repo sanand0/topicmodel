@@ -193,3 +193,44 @@ async def test_chat_error_logging(monkeypatch, capsys, tmp_path):
 
     log = capsys.readouterr().out
     assert "chat/completions" in log and "REQUEST" in log and "Bad request" in log
+
+@pytest.mark.asyncio
+async def test_cluster_hierarchy_const(monkeypatch, tmp_path):
+    """Test cluster() with --hierarchy but no value (uses const)."""
+    docs = '[{"t":"a"},{"t":"b"}]'
+    message = {"content": '{"topics": [{"id": 1, "topic": "Parent / Child"}]}'}
+    responses = [
+        {"data": [{"embedding": [1, 0]}, {"embedding": [0, 1]}]},
+        {"choices": [{"message": message}]},
+        {"data": [{"embedding": [1, 0]}, {"embedding": [0, 1]}]},
+    ]
+    monkeypatch.setenv("TOPICMODEL_CACHE", str(tmp_path / "cache.db"))
+    importlib.reload(topicmodel)
+    monkeypatch.setattr(topicmodel.httpx, "AsyncClient", lambda *a, **k: FakeClient(responses))
+
+    out = tmp_path / "out.json"
+    await topicmodel.amain([docs, "--output", str(out), "--ntopics", "2", "--hierarchy"])
+    result = json.loads(out.read_text())
+    assert any("/" in r["best_match"] for r in result)
+
+
+@pytest.mark.asyncio
+async def test_cluster_hierarchy_custom(monkeypatch, tmp_path):
+    """Test cluster() with --hierarchy and a custom string."""
+    docs = '[{"t":"a"},{"t":"b"}]'
+    message = {"content": '{"topics": [{"id": 1, "topic": "Science / Biology"}]}'}
+    responses = [
+        {"data": [{"embedding": [1, 0]}, {"embedding": [0, 1]}]},
+        {"choices": [{"message": message}]},
+        {"data": [{"embedding": [1, 0]}, {"embedding": [0, 1]}]},
+    ]
+    monkeypatch.setenv("TOPICMODEL_CACHE", str(tmp_path / "cache.db"))
+    importlib.reload(topicmodel)
+    monkeypatch.setattr(topicmodel.httpx, "AsyncClient", lambda *a, **k: FakeClient(responses))
+
+    out = tmp_path / "out.json"
+    await topicmodel.amain([
+        docs, "--output", str(out), "--ntopics", "2", "--hierarchy", "Create a 3-level hierarchy"
+    ])
+    result = json.loads(out.read_text())
+    assert any("/" in r["best_match"] for r in result)
