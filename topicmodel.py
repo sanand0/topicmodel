@@ -22,6 +22,11 @@ import pandas as pd
 import tiktoken
 from sklearn.cluster import KMeans
 from tqdm import tqdm
+from typing import List
+import umap
+from affine import Affine
+from shapely.geometry import shape as shp_shape, MultiPoint, Polygon
+from rasterio.features import shapes
 
 # cache embeddings in a shared SQLite database
 cache_path = Path(
@@ -182,6 +187,97 @@ async def similarity(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> 
     for row in rows:
         out.write("\t".join(map(str, row)) + "\n")
 
+def visualize_embeddings(emb: np.ndarray, labels: np.ndarray, topics: List[str], filename: str) -> None:
+    if emb.shape[0] <= 1:
+        print("Not enough data points to visualize")
+        return
+
+    # Dimensionality reduction
+    emb_2d = umap.UMAP(n_components=2, n_neighbors=min(15, emb.shape[0] - 1)).fit_transform(emb)
+    label_list = sorted(np.unique(labels))
+    k = len(label_list)
+
+    # Map compact index -> topic name
+    if len(topics) == k:
+        idx_to_topic = dict(enumerate(topics))
+    else:
+        idx_to_topic = {i: (topics[int(lab)] if int(lab) < len(topics) else f"Topic {int(lab)}") for i, lab in enumerate(label_list)}
+
+    # Centroids and padded bounds
+    centroids = np.vstack([
+        emb_2d[labels == lab].mean(axis=0) if np.any(labels == lab) else [0, 0]
+        for lab in label_list
+    ])
+    (min_x, min_y), (max_x, max_y) = emb_2d.min(0), emb_2d.max(0)
+    rngx, rngy = max_x - min_x, max_y - min_y
+    pad = 0.02 * max(rngx if rngx > 0 else 1, rngy if rngy > 0 else 1)
+    min_x, min_y, max_x, max_y = min_x - pad, min_y - pad, max_x + pad, max_y + pad
+    rngx, rngy = max_x - min_x, max_y - min_y
+
+    # Dynamic grid
+    base = int(min(600, max(200, emb.shape[0] * 2)))
+    W = max(60, base if rngx >= rngy else int(round(base * rngx / rngy)))
+    H = max(60, int(round(base * rngy / rngx)) if rngx >= rngy else base)
+    dx, dy = rngx / W, rngy / H
+
+    # Assign each grid cell center to nearest centroid
+    xs = min_x + dx * (np.arange(W) + 0.5)
+    ys = min_y + dy * (np.arange(H) + 0.5)
+    Xc, Yc = np.meshgrid(xs, ys)
+    grid_pts = np.c_[Xc.ravel(), Yc.ravel()]
+    idx_assign = ((grid_pts[:, None, :] - centroids[None, :, :])**2).sum(2).argmin(1).reshape(H, W)
+
+    # Polygonize labeled grid into gapless polygons
+    transform = Affine.translation(min_x, min_y) * Affine.scale(dx, dy)
+    best_poly_by_idx = {i: None for i in range(k)}
+    for geom, val in shapes(idx_assign.astype(np.int32), transform=transform):
+        i = int(val)  # compact cluster index (0..k-1)
+        g = shp_shape(geom)  # Polygon or MultiPolygon
+        # Pick largest polygon for each cluster
+        poly = max((g.geoms if g.geom_type == "MultiPolygon" else [g]), key=lambda p: p.area, default=None)
+        if poly and (best_poly_by_idx[i] is None or poly.area > best_poly_by_idx[i].area):
+            best_poly_by_idx[i] = poly
+
+    # Fallbacks for clusters without grid polygons
+    features = []
+    for i in range(k):
+        poly = best_poly_by_idx[i]
+        lab = label_list[i]
+        pts = emb_2d[labels == lab]
+        if poly is None or poly.is_empty or poly.area == 0:
+            if len(pts) == 0:
+                cx, cy = centroids[i]
+                eps = max(rngx, rngy) * 0.01
+                poly = Polygon([(cx-eps, cy-eps), (cx+eps, cy-eps), (cx+eps, cy+eps), (cx-eps, cy+eps)])
+            elif len(pts) == 1:
+                cx, cy = pts[0]
+                eps = max(rngx, rngy) * 0.005
+                poly = Polygon([(cx-eps, cy-eps), (cx+eps, cy-eps), (cx+eps, cy+eps), (cx-eps, cy+eps)])
+            else:
+                hull = MultiPoint(pts).convex_hull
+                if hull.geom_type != "Polygon" or hull.area == 0:
+                    c = hull.centroid if not hull.is_empty else None
+                    cx, cy = (c.x, c.y) if c else centroids[i]
+                    eps = max(rngx, rngy) * 0.005
+                    poly = Polygon([(cx-eps, cy-eps), (cx+eps, cy-eps), (cx+eps, cy+eps), (cx-eps, cy+eps)])
+                else:
+                    poly = hull
+        cen = poly.centroid if poly.area > 0 else None
+        centroid_out = [float(cen.x), float(cen.y)] if cen else [float(centroids[i, 0]), float(centroids[i, 1])]
+        coords = [list(map(float, c)) for c in np.asarray(poly.exterior.coords)]
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Polygon", "coordinates": [coords]},
+            "properties": {
+                "topic": idx_to_topic.get(i, topics[i] if i < len(topics) else f"Topic {i}"),
+                "cluster_id": int(lab),
+                "centroid": centroid_out
+            }
+        })
+
+    with open(filename, "w", encoding="utf-8") as fh:
+        json.dump({"type": "FeatureCollection", "features": features}, fh, indent=2)
+
 
 async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> None:
     """Cluster documents to discover topics and name them via chat()."""
@@ -213,6 +309,8 @@ async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> Non
     args.docs = json.dumps(df.to_dict(orient="records"))
     await similarity(args, fmt, out)
 
+    if args.plot:
+        visualize_embeddings(emb, km.labels_, topics, args.plot)
 
 def parse(argv: list[str]) -> argparse.Namespace:
     """Return parsed command line arguments."""
@@ -229,6 +327,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--nsamples", type=int, default=5, help="# docs to send for naming")
     p.add_argument("--truncate", type=int, default=200, help="Send first N chars of each doc")
     p.add_argument("--hierarchy", nargs="?", const="2 level depth", help="Instruction to create hierarchical topic names")
+    p.add_argument("--plot", type=str, help="Visualize document clusters")
     p.add_argument(
         "--prompt",
         help="Prompt used to name topics",
