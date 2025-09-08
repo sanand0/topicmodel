@@ -22,6 +22,10 @@ import pandas as pd
 import tiktoken
 from sklearn.cluster import KMeans
 from tqdm import tqdm
+import umap
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy.spatial import Voronoi
 
 # cache embeddings in a shared SQLite database
 cache_path = Path(
@@ -182,6 +186,48 @@ async def similarity(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> 
     for row in rows:
         out.write("\t".join(map(str, row)) + "\n")
 
+def visualize_embeddings(emb: np.ndarray, labels: np.ndarray, topics: list[str], filename: str) -> None:
+    if (rows := emb.shape[0]) <= 1:
+        return print("Not enough data points to visualize")
+    
+    emb_2d = umap.UMAP(n_components=2, n_neighbors=min(15, rows - 1)).fit_transform(emb)
+    
+    fig, ax = plt.subplots(figsize=(10, 10))
+    
+    x_min, y_min = emb_2d.min(axis=0)
+    x_max, y_max = emb_2d.max(axis=0)
+    x_range = x_max - x_min
+    y_range = y_max - y_min
+    
+    max_range = max(x_range, y_range) * 1.1
+    x_center = (x_min + x_max) / 2
+    y_center = (y_min + y_max) / 2
+    
+    xlim = [x_center - max_range/2, x_center + max_range/2]
+    ylim = [y_center - max_range/2, y_center + max_range/2]
+    
+    corners = np.array([[xlim[i] + 100 * (2*i-1), ylim[j] + 100 * (2*j-1)] 
+                      for i in range(2) for j in range(2)])
+    vor = Voronoi(np.vstack([emb_2d, corners]))
+    
+    unique_labels = np.unique(labels)
+    label_to_color = dict(zip(unique_labels, sns.color_palette("Set2", len(unique_labels))))
+    
+    for idx, region_idx in enumerate(vor.point_region[:len(emb_2d)]):
+        if (region := vor.regions[region_idx]) and -1 not in region:
+            polygon = np.clip(vor.vertices[region], [xlim[0], ylim[0]], [xlim[1], ylim[1]])
+            if len(polygon) >= 3:
+                ax.add_patch(plt.Polygon(polygon, facecolor=label_to_color[labels[idx]], 
+                                        edgecolor='none', alpha=0.8))
+    
+    ax.set(xlim=xlim, ylim=ylim, xticks=[], yticks=[], aspect='equal')
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    
+    plt.tight_layout()
+    plt.savefig(filename, format='svg', bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
+
 
 async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> None:
     """Cluster documents to discover topics and name them via chat()."""
@@ -213,6 +259,9 @@ async def cluster(args: argparse.Namespace, fmt: str, out: io.TextIOBase) -> Non
     args.docs = json.dumps(df.to_dict(orient="records"))
     await similarity(args, fmt, out)
 
+    if args.plot:
+        visualize_embeddings(emb, km.labels_, topics, args.plot)
+
 
 def parse(argv: list[str]) -> argparse.Namespace:
     """Return parsed command line arguments."""
@@ -229,6 +278,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--nsamples", type=int, default=5, help="# docs to send for naming")
     p.add_argument("--truncate", type=int, default=200, help="Send first N chars of each doc")
     p.add_argument("--hierarchy", nargs="?", const="2 level depth", help="Instruction to create hierarchical topic names")
+    p.add_argument("--plot", type=str, help="Visualize document clusters")
     p.add_argument(
         "--prompt",
         help="Prompt used to name topics",
