@@ -69,6 +69,16 @@ This groups each line into the 2 topics in `topics.txt` along with the similarit
 | Bread needs yeast.          | Cooking    |   0.03838 | 0.18655 |
 | Basil smells fresh.         | Cooking    |   0.05344 | 0.16860 |
 
+## Plot
+
+You can visualize how documents cluster into topics using the `--plot` option. Extending the example from [Discover Topics](#discover-topics), run:
+
+```bash
+uvx topicmodel docs.txt --ntopics=2 --plot=plot.svg
+```
+
+This creates a `plot.svg` file showing a 2D visualization of your documents using UMAP dimensionality reduction. Each point represents a document, and regions are colored by their topic. Documents closer together are more similar, making it easy to see how well topics separate and which documents might be borderline cases.
+
 ## Options
 
 - `--docs`: File containing documents. Required. Can be `.txt`, `.csv` or `.json` file or a JSON string
